@@ -1,0 +1,10 @@
+target/
+*.class
+.idea/
+*.iml
+out/
+
+# 临时/生成文件
+_tut_*.png
+_tutorial_small.png
+*.pdf.txt
