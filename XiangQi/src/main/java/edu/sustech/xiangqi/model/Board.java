@@ -1,7 +1,9 @@
 package edu.sustech.xiangqi.model;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.List;
 
 // 保存棋盘数据，并统一检查、执行移动、判定状态、提供存盘编码
@@ -12,6 +14,9 @@ public class Board {
     private final Piece[][] pieces = new Piece[ROWS][COLS];
     private Side currentTurn = Side.RED;
     private final List<Move> history = new ArrayList<>();
+
+    // 悔棋用的局面快照栈（每步走子前压入 encode() 结果）
+    private final Deque<String> undoStack = new ArrayDeque<>();
 
     private boolean gameOver = false;
     private Side winner = null;          // 胜负时的赢家；和棋时为 null
@@ -47,6 +52,7 @@ public class Board {
         }
         currentTurn = Side.RED;
         history.clear();
+        undoStack.clear();
         gameOver = false;
         winner = null;
         resultMessage = "";
@@ -257,21 +263,112 @@ public class Board {
         if (!isLegalFor(currentTurn, fromRow, fromCol, toRow, toCol)) {
             return false;
         }
+        undoStack.push(encode()); // 记录走子前的局面，供悔棋
         Piece piece = pieces[fromRow][fromCol];
         Piece captured = pieces[toRow][toCol];
 
-        pieces[toRow][toCol] = piece;
-        pieces[fromRow][fromCol] = null;
+        applyMove(fromRow, fromCol, toRow, toCol);
         lastFromRow = fromRow;
         lastFromCol = fromCol;
         lastToRow = toRow;
         lastToCol = toCol;
         history.add(new Move(fromRow, fromCol, toRow, toCol, piece.getName(),
                 captured == null ? null : captured.getName()));
-
-        currentTurn = currentTurn.opposite();
         evaluateStatus();
         return true;
+    }
+
+    // 不做合法性检查地落子，并切换回合；返回被吃的棋子（可为 null）。供 AI 搜索使用。
+    public Piece applyMove(int fromRow, int fromCol, int toRow, int toCol) {
+        Piece piece = pieces[fromRow][fromCol];
+        Piece captured = pieces[toRow][toCol];
+        pieces[toRow][toCol] = piece;
+        pieces[fromRow][fromCol] = null;
+        currentTurn = currentTurn.opposite();
+        return captured;
+    }
+
+    // 撤销 applyMove 的效果
+    public void revertMove(int fromRow, int fromCol, int toRow, int toCol, Piece captured) {
+        pieces[fromRow][fromCol] = pieces[toRow][toCol];
+        pieces[toRow][toCol] = captured;
+        currentTurn = currentTurn.opposite();
+    }
+
+    public boolean canUndo() {
+        return !undoStack.isEmpty();
+    }
+
+    // 悔棋一步：恢复到上一步走子前的局面。成功返回 true。
+    public boolean undo() {
+        if (undoStack.isEmpty()) {
+            return false;
+        }
+        Board previous = decode(undoStack.pop());
+        if (previous == null) {
+            return false;
+        }
+        copyStateFrom(previous);
+        return true;
+    }
+
+    // 该方所有合法走法，每项为 {fromRow, fromCol, toRow, toCol}
+    public List<int[]> legalMoves(Side side) {
+        List<int[]> moves = new ArrayList<>();
+        for (int r = 0; r < ROWS; r++) {
+            for (int c = 0; c < COLS; c++) {
+                Piece p = pieces[r][c];
+                if (p == null || p.getSide() != side) {
+                    continue;
+                }
+                for (int tr = 0; tr < ROWS; tr++) {
+                    for (int tc = 0; tc < COLS; tc++) {
+                        if (isLegalFor(side, r, c, tr, tc)) {
+                            moves.add(new int[]{r, c, tr, tc});
+                        }
+                    }
+                }
+            }
+        }
+        return moves;
+    }
+
+    // 子力评估（以 side 视角，正数表示 side 占优）；仅用于简单的 AI 搜索
+    public int materialScore(Side side) {
+        int score = 0;
+        for (int r = 0; r < ROWS; r++) {
+            for (int c = 0; c < COLS; c++) {
+                Piece p = pieces[r][c];
+                if (p == null) {
+                    continue;
+                }
+                int value = pieceValue(p, r);
+                score += (p.getSide() == side) ? value : -value;
+            }
+        }
+        return score;
+    }
+
+    private static int pieceValue(Piece p, int row) {
+        switch (p.getTypeCode()) {
+            case "g":
+                return 10000;
+            case "r":
+                return 900;
+            case "c":
+                return 450;
+            case "h":
+                return 400;
+            case "e":
+            case "a":
+                return 200;
+            case "s":
+                // 过河兵更有价值
+                boolean crossed = p.getSide() == Side.RED ? row <= 4 : row >= 5;
+                return crossed ? 200 : 100;
+            default:
+                return 0;
+        }
     }
 
     private void evaluateStatus() {
@@ -323,9 +420,15 @@ public class Board {
         sb.append("moves ").append(history.size()).append('\n');
         for (Move m : history) {
             sb.append(m.fromRow).append(' ').append(m.fromCol).append(' ')
-                    .append(m.toRow).append(' ').append(m.toCol).append('\n');
+                    .append(m.toRow).append(' ').append(m.toCol).append(' ')
+                    .append(blankToDash(m.pieceName)).append(' ')
+                    .append(m.capturedName == null ? "-" : blankToDash(m.capturedName)).append('\n');
         }
         return sb.toString();
+    }
+
+    private static String blankToDash(String name) {
+        return (name == null || name.isEmpty()) ? "-" : name;
     }
 
     private static String tokenOf(Piece p) {
@@ -404,7 +507,7 @@ public class Board {
                     return null;
                 }
                 String[] m = lines[idx].trim().split("\\s+");
-                if (m.length != 4) {
+                if (m.length != 4 && m.length != 6) {
                     return null;
                 }
                 int fr = Integer.parseInt(m[0]);
@@ -414,7 +517,13 @@ public class Board {
                 if (!board.isInside(fr, fc) || !board.isInside(tr, tc)) {
                     return null;
                 }
-                board.history.add(new Move(fr, fc, tr, tc, "", null));
+                String pieceName = "";
+                String capturedName = null;
+                if (m.length == 6) {
+                    pieceName = "-".equals(m[4]) ? "" : m[4];
+                    capturedName = "-".equals(m[5]) ? null : m[5];
+                }
+                board.history.add(new Move(fr, fc, tr, tc, pieceName, capturedName));
                 idx++;
             }
 
@@ -468,6 +577,12 @@ public class Board {
 
     // 用另一局的数据覆盖当前局面（用于读档）
     public void assign(Board other) {
+        copyStateFrom(other);
+        undoStack.clear(); // 读档后从新的局面开始，不允许悔到读档前
+    }
+
+    // 只复制局面相关状态，不动悔棋栈
+    private void copyStateFrom(Board other) {
         for (int r = 0; r < ROWS; r++) {
             for (int c = 0; c < COLS; c++) {
                 pieces[r][c] = other.pieces[r][c];

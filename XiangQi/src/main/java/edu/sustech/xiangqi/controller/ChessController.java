@@ -2,6 +2,7 @@ package edu.sustech.xiangqi.controller;
 
 import edu.sustech.xiangqi.model.Board;
 import edu.sustech.xiangqi.model.Piece;
+import edu.sustech.xiangqi.model.Side;
 import edu.sustech.xiangqi.view.BoardPanel;
 
 import javax.swing.SwingUtilities;
@@ -17,6 +18,8 @@ public class ChessController extends MouseAdapter {
 
     private int selectedRow = -1;
     private int selectedCol = -1;
+    // 玩家只操作这一方；为 null 表示红黑双方都能点（人人对战）
+    private Side controllableSide;
 
     public ChessController(Board board, BoardPanel boardPanel, Runnable onUpdate) {
         this.board = board;
@@ -24,9 +27,18 @@ public class ChessController extends MouseAdapter {
         this.onUpdate = onUpdate;
     }
 
+    public void setControllableSide(Side side) {
+        this.controllableSide = side;
+        clearSelection();
+    }
+
     @Override
     public void mouseClicked(MouseEvent event) {
         if (!SwingUtilities.isLeftMouseButton(event) || board.isGameOver()) {
+            return;
+        }
+        // 人机对战轮到电脑时，忽略人的点击
+        if (controllableSide != null && board.getCurrentTurn() != controllableSide) {
             return;
         }
         Point position = boardPanel.getIntersectionAt(event.getX(), event.getY());
@@ -43,7 +55,7 @@ public class ChessController extends MouseAdapter {
 
         Piece clickedPiece = board.getPieceAt(row, col);
         if (selectedRow == -1) {
-            if (clickedPiece != null) {
+            if (clickedPiece != null && isControllable(clickedPiece)) {
                 select(row, col);
             }
             return;
@@ -61,6 +73,10 @@ public class ChessController extends MouseAdapter {
         if (board.tryMove(selectedRow, selectedCol, row, col)) {
             clearSelection();
         }
+    }
+
+    private boolean isControllable(Piece piece) {
+        return controllableSide == null || piece.getSide() == controllableSide;
     }
 
     private void select(int row, int col) {
