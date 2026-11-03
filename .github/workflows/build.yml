@@ -1,0 +1,39 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Compile all sources
+        working-directory: XiangQi
+        run: |
+          mkdir -p target/classes
+          find src/main/java -name '*.java' > sources.txt
+          javac -encoding UTF-8 -d target/classes @sources.txt
+          echo "compiled $(wc -l < sources.txt) files"
+
+      - name: Package jar
+        working-directory: XiangQi
+        run: |
+          jar --create --file target/xiangqi.jar \
+              --main-class edu.sustech.xiangqi.Main \
+              -C target/classes .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xiangqi-jar
+          path: XiangQi/target/xiangqi.jar
