@@ -5,6 +5,11 @@ target/
 out/
 
 # 临时/生成文件
+_scratch/
 _tut_*.png
 _tutorial_small.png
 *.pdf.txt
+
+# 参考资料（不纳入版本库）
+*.pdf
+*.jpeg
