@@ -8,9 +8,22 @@ CS109 课程项目：一个用 **纯 Java（Swing）** 实现的中国象棋，�
 - JDK 25 及以上（开发验证于 JDK 26）
 - Maven（可选，用于打包；也可直接用 `javac` 编译）
 
-## 编译与运行
+## 启动方式
 
-### 方式一：直接用 javac / java（无需 Maven）
+### 方式一：双击 exe 启动（推荐，无需安装 Java）
+
+直接双击 `XiangQi\dist\XiangQi\XiangQi.exe`（仓库根目录的 `中国象棋.lnk` 快捷方式等价）。
+它是用 JDK 自带 `jpackage` 生成的应用镜像，**自带精简 JRE**，目标机器不需要装 Java。
+
+若 `XiangQi\dist` 不存在（例如刚 clone 仓库，构建产物不进版本库），在仓库根目录执行一次：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File build-launcher.ps1
+```
+
+脚本会自动找 JDK → 编译 → 打 jar → 生成 `XiangQi\dist\XiangQi\XiangQi.exe` 与图标。
+
+### 方式二：直接用 javac / java（无需 Maven）
 
 ```bat
 cd XiangQi
@@ -18,7 +31,7 @@ javac -encoding UTF-8 -d target\classes (src 下所有 .java 文件)
 java -cp target\classes edu.sustech.xiangqi.Main
 ```
 
-### 方式二：Maven
+### 方式三：Maven
 
 ```bat
 cd XiangQi
@@ -75,6 +88,7 @@ java -jar target\xiangqi-1.0.jar
 ```
 XiangQi/
   pom.xml
+  launcher/app.ico            启动器图标
   src/main/java/edu/sustech/xiangqi/
     Main.java                 程序入口
     model/                    棋盘、棋子、走法规则、对局状态
@@ -87,9 +101,12 @@ XiangQi/
       BoardPanel / LoginDialog / ChessFrame
     controller/
       ChessController.java    鼠标交互
+  dist/XiangQi/XiangQi.exe    构建产物：双击启动（自带 JRE，不入版本库）
+build-launcher.ps1            一键生成上述 exe
 ```
 
 ## 说明
 
 - 存档格式为纯文本（`XQSAVE1` 头 + 回合 + 棋盘 + 走棋历史），读取时会校验棋子数量与将军合法性，异常一律当作“无存档/无损坏”，不会崩溃。
 - 和棋采用“双方同意”按钮直接判定（简化实现）。
+- 启动器用 JDK 自带的 `jpackage --type app-image` 生成：一个文件夹（`XiangQi.exe` + `app/` + `runtime/`），整体可拷贝到任何 Windows 机器双击运行；如需单文件安装包，可用 `jpackage --type exe`（需要本机装 WiX）。

@@ -13,3 +13,7 @@ _tutorial_small.png
 # 参考资料（不纳入版本库）
 *.pdf
 *.jpeg
+
+# jpackage 生成的应用镜像（本地构建产物，可用 build-launcher.ps1 重新生成）
+XiangQi/dist/
+*.lnk
